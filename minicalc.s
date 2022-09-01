@@ -25,6 +25,10 @@ ENUM $0
   ; Actual program state variables
   cursorX     db 1
   cursorY     db 1
+
+  entryCursor db 1 ; position of current entry digit (0-3)
+  entry       db 4 ; one byte per digit being entered
+
 ENDE
 
 
@@ -45,6 +49,8 @@ Boot:
 
   sta cursorX
   sta cursorY
+
+  sta entryCursor
 
   lda #<BackgroundTiles2bpp
   sta source
@@ -167,6 +173,16 @@ ReadInputs:
   lda newInputs
   and #PAD_RIGHT
   bne @padRight
+
+  lda newInputs
+  and #PAD_A
+  bne @padA
+  lda newInputs
+  and #PAD_B
+  bne @padB
+  lda newInputs
+  and #PAD_C
+  bne @padC
 @done
   rts
 @padDown
@@ -194,6 +210,39 @@ ReadInputs:
   inc cursorX
   rts
 
+@padA
+  lda cursorY
+  cmp #4
+  bcs @specialButton
+  ; Digit button
+  lda entryCursor
+  cmp #4        ; check if digits already full
+  beq @done
+  lda cursorY
+  asl ; Y*4
+  asl
+  adc cursorX   ; A now contains the digit value
+  ldx entryCursor
+  sta entry, x
+  inc entryCursor
+  jmp DrawEntry
+
+@specialButton
+  rts
+
+@padB
+  lda entryCursor
+  cmp #0
+  beq btnPop
+  dec entryCursor
+  jmp DrawEntry
+
+@padC
+  rts
+
+; Draw the current entry digits
+DrawEntry:
+  rts
 
 
 ; Unpack a full 2bpp background image to the screen
@@ -242,17 +291,21 @@ Draw2bppScreen:
 
   rts
 
-; ; Clear screen
-; Clear:
-;     ldx #0
-;   -
-;     lsr
-;     sta $f700,x
-;     sta $f800,x
-;     sta $f900,x
-;     dex
-;     bne -
-;   rts
+
+; Special button handlers
+btnPush:
+btnPop:
+btnSwap:
+btnDupe:
+btnAdd:
+btnSub:
+btnMul:
+btnDiv:
+btnAnd:
+btnEor:
+btnShl:
+btnShr:
+  rts
 
 
   org $0500
@@ -312,6 +365,24 @@ CursorDetails:
   button 38, 0, 9, 9
   button 46, 0, 9, 9
   button 54, 0, 9, 9
+
+; Table with routines to call for each button pressed,
+;  aside from the digit buttons which are handled otherwise
+ButtonJumpTable:
+  dw btnPush
+  dw btnPop
+  dw btnSwap
+  dw btnDupe
+
+  dw btnAdd
+  dw btnSub
+  dw btnMul
+  dw btnDiv
+
+  dw btnAnd
+  dw btnEor
+  dw btnShl
+  dw btnShr
 
   org $0600
 ; Packed tile data
