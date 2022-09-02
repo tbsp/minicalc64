@@ -1,6 +1,7 @@
 include "64cube.inc"
 
-Screen EQU $f000
+Screen    EQU $f000
+EntryAddr EQU (Screen + 46 * 64 + 4) ; Address to start drawing entry digits
 
 ENUM $0
   r0          db 1 ; general purpose ZP variables
@@ -27,7 +28,7 @@ ENUM $0
   cursorY     db 1
 
   entryCursor db 1 ; position of current entry digit (0-3)
-  entry       db 4 ; one byte per digit being entered
+  entryDigits db 4 ; one byte per digit being entered
 
 ENDE
 
@@ -51,6 +52,27 @@ Boot:
   sta cursorY
 
   sta entryCursor
+
+  ; Unpack 1bpp digit tiles as color 3
+  lda #<DigitTiles
+  sta dest
+  lda #>DigitTiles
+  sta dest+1
+
+  lda #3
+  sta r0
+  jsr UnpackDigitTiles
+
+  ; Unpack 1bpp digit tiles as color 2
+  lda #<DigitTilesDim
+  sta dest
+  lda #>DigitTilesDim
+  sta dest+1
+
+  lda #2
+  sta r0
+  jsr UnpackDigitTiles
+
 
   lda #<BackgroundTiles2bpp
   sta source
@@ -93,9 +115,9 @@ IRQ:
 
 ; Draw a cursor based on cursorX/cursorY with a given color
 DrawCursor:
-  color  EQU r0
-  width  EQU r1
-  height EQU r2
+  color = r0
+  width = r1
+  height = r2
 
   lda cursorY
   asl ; Y*16
@@ -223,7 +245,7 @@ ReadInputs:
   asl
   adc cursorX   ; A now contains the digit value
   ldx entryCursor
-  sta entry, x
+  sta entryDigits, x
   inc entryCursor
   jmp DrawEntry
 
@@ -231,17 +253,146 @@ ReadInputs:
   rts
 
 @padB
+  rts
+
+@padC
   lda entryCursor
   cmp #0
   beq btnPop
   dec entryCursor
   jmp DrawEntry
 
-@padC
+
+; Special button handlers
+btnPush:
+btnPop:
+btnSwap:
+btnDupe:
+btnAdd:
+btnSub:
+btnMul:
+btnDiv:
+btnAnd:
+btnEor:
+btnShl:
+btnShr:
   rts
 
-; Draw the current entry digits
+
+; Draw the current entry digits (and clear entries after the cursor)
 DrawEntry:
+  digitPtr = r7 ; digit we're drawing
+
+  lda #<EntryAddr   ; setup screen destination address
+  sta dest
+  lda #>EntryAddr
+  sta dest+1
+
+  ; Draw digits up to entryCursor, then erase digits until 4
+  lda entryCursor   ; check for zero digit case
+  cmp #0
+  beq +
+
+  lda #0            ; start printing at the 0th digit
+  sta digitPtr
+
+-
+  ldx digitPtr
+  lda entryDigits, x
+  sta r0
+  jsr DrawDigit
+
+  inc digitPtr
+  lda digitPtr
+  cmp entryCursor
+  bne -
+  ; Fall through to eraseRemainder
+
++
+  lda dest
+  cmp #<(EntryAddr + 4 * 4)
+  beq @done
+  jsr EraseDigit
+  jmp +
+
+@done
+  rts
+
+; Erase a digit at the current destination
+EraseDigit:
+  lda #<(DigitEmpty-1)
+  sta source
+  lda #>(DigitEmpty-1)
+  sta source+1
+  
+  jmp DrawCharacter
+
+; Draw a digit of value r0 at the current dest
+DrawDigit:
+  digit = r0
+
+  ; Offset base address -1 because dey loops skip the 0th pixel
+  lda #<(DigitTiles-1)
+  sta source
+  lda #>(DigitTiles-1)
+  sta source+1
+
+  ; Add 20 bytes per digit
+  lda digit
+  asl ; digit*4
+  asl
+  tax
+  adc source  ; add the *4 component, which cannot overflow
+  sta source
+  txa
+  asl ; digit*16
+  asl
+  adc source
+  sta source
+  lda source+1
+  adc #0
+  sta source+1
+  ; Fall through to DrawCharacter
+
+DrawCharacter:
+  destCache = r1 ; 2 bytes to cache dest ptr
+
+  ; Cache initial destination for after drawing
+  lda dest
+  sta destCache
+  lda dest+1
+  sta destCache+1
+
+  ; Draw 5 rows of 4 pixels each
+  ldx #5
+--
+  ldy #4
+- lda (source), y
+  sta (dest), y
+  dey
+  bne -
+
+  lda source ; advance source a row
+  adc #4
+  sta source
+
+  lda dest  ; advance destination a row
+  adc #$40
+  sta dest
+  lda dest+1
+  adc #0
+  sta dest+1
+
+  dex
+  bne --
+
+  lda destCache   ; restore dest and advance for next char
+  clc
+  adc #4
+  sta dest
+  lda destCache+1
+  sta dest+1
+
   rts
 
 
@@ -250,10 +401,10 @@ DrawEntry:
 ; dest:   Pointer to destination (Screen start addr, page aligned)
 Draw2bppScreen:
   ; Define local aliases for clarity
-  wrk EQU r0  ; working 2bpp byte
-  sft EQU r1  ; working byte with shifted bits
-  src EQU r2  ; source index
-  dst EQU r3  ; destination index
+  wrk = r0  ; working 2bpp byte
+  sft = r1  ; working byte with shifted bits
+  src = r2  ; source index
+  dst = r3  ; destination index
 
   lda #0
   sta src   ; initialize source offset
@@ -291,21 +442,58 @@ Draw2bppScreen:
 
   rts
 
+; Digit tiles are packed as 1bpp to save ROM space
+;  (because we're totally short on that, right?!)
+UnpackDigitTiles:
+  color = r0  ; color to map set bits to
+  wrk = r1  ; working 1bpp byte
+  src = r2  ; source index
+  dst = r3  ; destination index
+  bits = r4  ; bit counter
+  bytes = r5 ; byte counter
 
-; Special button handlers
-btnPush:
-btnPop:
-btnSwap:
-btnDupe:
-btnAdd:
-btnSub:
-btnMul:
-btnDiv:
-btnAnd:
-btnEor:
-btnShl:
-btnShr:
+  lda #<DigitTiles1bpp
+  sta source
+  lda #>DigitTiles1bpp
+  sta source+1
+
+  lda #0
+  sta src   ; initialize source offset
+  sta dst   ; initialize dest offset
+
+  lda #40   ; unpack 40 bytes
+  sta bytes
+--
+    ldy src   ; get source offset
+    lda (source), y  ; get 1bpp byte
+    sta wrk   ; store working 1bpp byte
+  
+    ; Unpack 8 bits
+    lda #8
+    sta bits
+
+    ldy dst   ; get destination offset
+  - lda wrk   ; get working 1bpp byte
+      asl       ; shift MSB into carry
+      sta wrk   ; backup working 1bpp byte
+      lda #0    ; setup for unset bit
+      bcc +
+      lda color ; replace with color value
+    + sta (dest), y
+      iny       ; point at next pixel
+      bne +
+      inc dest+1 ; increment high byte of destination
+      +
+      dec bits
+      bne -     ; loop 8 times
+    sty dst
+
+    inc src   ; point at next source 1bpp byte
+    dec bytes
+    bne --
+
   rts
+
 
 
   org $0500
@@ -396,5 +584,21 @@ BackgroundTiles2bpp:
 ; Location to unpack digit tiles to
 ; (Background tiles will be unpacked directly to the screen)
   org $1400
+  ;org Screen ; debug, unpack to screen itself!
+
+; Include a padding byte so we can do DigitEmpty-1 and stay on the page
+Padding:
+  dsb 1
+
+; Empty tile (used to erase old digits)
+DigitEmpty:
+  dsb 4*5 ; (assembler will zero fill this)
+
+; Primary tiles used for digit entry (color 3)
 DigitTiles:
+  dsb 4*80
+
+  org $1600 ; new page to simplify DrawDigit
+; Dim tiles used for stack (color 2)
+DigitTilesDim:
   dsb 4*80
