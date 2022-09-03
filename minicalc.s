@@ -2,33 +2,40 @@ include "64cube.inc"
 
 Screen    EQU $f000
 EntryAddr EQU (Screen + 46 * 64 + 4) ; Address to start drawing entry digits
+StackAddr EQU (Screen + 36 * 64 + 4) ; Address to start drawing stack digits
 
 ENUM $0
-  r0          db 1 ; general purpose ZP variables
-  r1          db 1
-  r2          db 1
-  r3          db 1
-  r4          db 1
-  r5          db 1
-  r6          db 1
-  r7          db 1
+  r0          dsb 1 ; general purpose ZP variables
+  r1          dsb 1
+  r2          dsb 1
+  r3          dsb 1
+  r4          dsb 1
+  r5          dsb 1
+  r6          dsb 1
+  r7          dsb 1
 
-  ready       db 1 ; indicates NMI has fired
+  ready       dsb 1 ; indicates NMI has fired
 
   ; General pointers
-  source      dw 1 ; source pointer
-  dest        dw 1 ; destination pointer
+  source      dsw 1 ; source pointer
+  dest        dsw 1 ; destination pointer
 
   ; Joypad handling
-  heldInputs  db 1 ; inputs being held
-  newInputs   db 1 ; new inputs pressed this frame
+  heldInputs  dsb 1 ; inputs being held
+  newInputs   dsb 1 ; new inputs pressed this frame
 
   ; Actual program state variables
-  cursorX     db 1
-  cursorY     db 1
+  cursorX     dsb 1
+  cursorY     dsb 1
 
-  entryCursor db 1 ; position of current entry digit (0-3)
-  entryDigits db 4 ; one byte per digit being entered
+  entryCursor dsb 1 ; position of current entry digit (0-3)
+  entryDigits dsb 4 ; one byte per digit being entered
+
+  sPtr        dsb 1 ; stack pointer
+  stack       dsb 32 ; 2 bytes per entry (always 16bit entries)
+                    ;  (only the lower 5 entries are visible)
+
+  scratch     dsb 4 ; 'large' scratch buffer (used for staging digits to print)
 
 ENDE
 
@@ -45,13 +52,17 @@ Boot:
   lda #>Palette
   sta COLORS
 
+  ; minicube64's memory is initialized to zero
+  ; lda #0
+  ; sta heldInputs
+
+  ; sta cursorX
+  ; sta cursorY
+
+  ; sta entryCursor
+
   lda #0
-  sta heldInputs
-
-  sta cursorX
-  sta cursorY
-
-  sta entryCursor
+  sta sPtr
 
   ; Unpack 1bpp digit tiles as color 3
   lda #<DigitTiles
@@ -109,8 +120,10 @@ Main:
 
 ; NMI Handler
 IRQ:
+  pha
   lda #1
   sta ready     ; Flag that vblank fired
+  pla
   rti
 
 ; Draw a cursor based on cursorX/cursorY with a given color
@@ -253,43 +266,262 @@ ReadInputs:
   rts
 
 @padB
-  rts
-
-@padC
+  ; backspace OR pop (if no digits entered)
   lda entryCursor
   cmp #0
   beq btnPop
+
   dec entryCursor
+  ldx entryCursor ; we have to zero the digit or partial pushes in the future will be wrong
+  lda #0
+  sta entryDigits, x
   jmp DrawEntry
 
+@padC
+  jmp btnPush
 
-; Special button handlers
+
+; Push the current entry to the stack, as long as
+;  there is an entry and the stack isn't full (TODO: check full)
 btnPush:
+  lda entryCursor
+  cmp #0
+  beq @noEntry
+  
+  len = r0
+  
+  ldx sPtr
+
+  lda entryDigits+2
+  asl
+  asl
+  asl
+  asl
+  ora entryDigits+3
+  sta stack, x  ; store low byte on stack
+  inx
+
+  lda entryDigits
+  asl
+  asl
+  asl
+  asl
+  ora entryDigits+1
+  sta stack, x
+  dex
+
+  ora stack, x  ; OR high and low bytes
+  beq @clearEntry ; entry was zero, clear the entry and don't touch the stack pointer
+
+  inc sPtr
+  inc sPtr
+
+  jsr DrawStack ; we've actually altered the stack, so draw it!
+
+@clearEntry
+  ; Clear entryDigits and entryCursor
+  lda #0
+  sta entryDigits
+  sta entryDigits+1
+  sta entryDigits+2
+  sta entryDigits+3
+  sta entryCursor
+  jmp DrawEntry
+@noEntry
+  rts
+
+; Pop the last entry off the stack (if there is one)
 btnPop:
+  ldx sPtr
+  cpx #0
+  beq + ; stack empty, pop nothing
+  dex
+  dex
+  stx sPtr
+  jsr DrawStack ; we've actually altered the stack, so draw it!
++
+  rts
+
+; Swap the last two items on the stack (if there are two)
 btnSwap:
+  rts
+
+; Duplicate the last item on the stack (if there is one)
 btnDupe:
+  rts
+
+; Add the last two items on the stack and push the result
 btnAdd:
+  rts
+
+; Subtract the last item on the stack from the second last and push the result
 btnSub:
+  rts
+
+; Multiply the last two items on the stack and push the result
 btnMul:
+  rts
+
+; Divide the last item on the stack by the second last and push the result
 btnDiv:
+  rts
+
+; Bitwise AND the last two items on the stack and push the result
 btnAnd:
+  rts
+
+; Bitwise OR the last two items on the stack and push the result
 btnEor:
+  rts
+
+; Shift the last item on the stack left (logically)
 btnShl:
+  rts
+
+; Shift the last item on the stack right (logically)
 btnShr:
   rts
 
+; Draw the last 5 entires of the stack, from the bottom up
+DrawStack:
+  tmp = r3
+  ePtr = r4 ; pointer to stack entry we're drawing
+  len = r5 ; length of digits to draw (shared with DrawFourDigits)
+
+  lda #<StackAddr
+  sta dest
+  lda #>StackAddr
+  sta dest+1
+
+  ldx sPtr
+  cpx #0  ; check for empty stack case
+  beq @eraseRows
+  dex     ; step back to the last actual entry
+  dex
+  stx ePtr
+
+@rowLoop
+  ; Unpack entry into scratch as up to 4 bytes (depending on leading zeroes)
+  lda #0
+  sta len         ; init length counter
+  lda stack+1, x  ; get high byte
+  tay             ; cache for low nibble below
+  lsr             ; >> 4
+  lsr
+  lsr
+  lsr
+  cmp #0          ; check if it's a leading zero
+  beq @lz0        ; don't add it to scratch or increment the length if it's zero
+  ldx len
+  sta scratch, x  ; store the digit at the current length offset
+  inc len
+@lz0
+  tya             ; recover cached high byte
+  and #$0f        ; mask off high nibble
+  tay             ; cache for leading zero check
+  ora len         ; check if the value as well as the length are zero
+  beq @lz1        ; the value is zero, and our length is zero, so don't add the digit
+  ldx len
+  sty scratch, x
+  inc len
+@lz1
+
+  ldx ePtr
+  lda stack, x    ; get low byte
+  sta tmp         ; cache the low byte
+  lsr             ; >> 4
+  lsr
+  lsr
+  lsr
+  tay             ; cache for leading zero check
+  ora len
+  beq @lz2
+  ldx len
+  sty scratch, x
+  inc len
+@lz2
+  lda tmp         ; recover cached low byte
+  and #$0f        ; mask off high nibble
+  tay             ; cache for leading zero check
+  ora len
+  beq @lz3
+  ldx len
+  sty scratch, x
+  inc len
+@lz3
+
+  jsr DrawFourDigits
+
+  ; Adjust destination for next row
+  sec
+  lda dest
+  sbc #<($40 * 6 + 4 * 4)
+  sta dest
+  lda dest+1
+  sbc #>($40 * 6 + 4 * 4)
+  sta dest+1
+
+  ldx ePtr
+  cpx #0
+  beq @eraseRows  ; start erasing rows if we reached the top of the stack
+
+  lda dest+1
+  cmp #>(StackAddr - ($40 * 6 + 4 * 4) * 5) ; why doesn't 6 work here?
+  beq @done       ; stop drawing entirely if we've reached the final drawn row
+
+  dex ; adjust our stack pointer
+  dex
+  stx ePtr
+  jmp @rowLoop
+
+@eraseRows
+  ; Erase the remaining rows
+
+  ; Check if we just drew the final row
+  lda dest+1
+  cmp #>(StackAddr - ($40 * 6 + 4 * 4) * 5)
+  beq @done
+
+
+@done
+  rts
 
 ; Draw the current entry digits (and clear entries after the cursor)
 DrawEntry:
-  digitPtr = r7 ; digit we're drawing
+  ; Copy current entry to scratch RAM
+  lda entryDigits
+  sta scratch
+  lda entryDigits+1
+  sta scratch+1
+  lda entryDigits+2
+  sta scratch+2
+  lda entryDigits+3
+  sta scratch+3
+
+  lda entryCursor
+  sta r5
 
   lda #<EntryAddr   ; setup screen destination address
   sta dest
   lda #>EntryAddr
   sta dest+1
 
+  ; Fall through into DrawFourDigits
+
+; Draw 4 digits from 'scratch' in the ZP
+DrawFourDigits:
+  length = r5 ; how many digits to draw (remainder will be cleared)
+
+  digitPtr = r6 ; digit we're drawing
+  endAddr = r7 ; address that we're done drawing at
+
+  lda dest
+  clc
+  adc #(4*4)
+  sta endAddr
+  
   ; Draw digits up to entryCursor, then erase digits until 4
-  lda entryCursor   ; check for zero digit case
+  lda length        ; check for zero digit case
   cmp #0
   beq +
 
@@ -298,22 +530,23 @@ DrawEntry:
 
 -
   ldx digitPtr
-  lda entryDigits, x
+  lda scratch, x
   sta r0
   jsr DrawDigit
 
   inc digitPtr
   lda digitPtr
-  cmp entryCursor
+  cmp length
   bne -
-  ; Fall through to eraseRemainder
+  ; Fall through to erase the rest of the entries
 
 +
+@eraseLoop
   lda dest
-  cmp #<(EntryAddr + 4 * 4)
+  cmp endAddr
   beq @done
   jsr EraseDigit
-  jmp +
+  jmp @eraseLoop
 
 @done
   rts
@@ -327,15 +560,16 @@ EraseDigit:
   
   jmp DrawCharacter
 
+
 ; Draw a digit of value r0 at the current dest
 DrawDigit:
-  digit = r0
-
   ; Offset base address -1 because dey loops skip the 0th pixel
   lda #<(DigitTiles-1)
   sta source
   lda #>(DigitTiles-1)
   sta source+1
+
+  digit = r0
 
   ; Add 20 bytes per digit
   lda digit
@@ -375,6 +609,9 @@ DrawCharacter:
   lda source ; advance source a row
   adc #4
   sta source
+  lda source+1
+  adc #0
+  sta source+1
 
   lda dest  ; advance destination a row
   adc #$40
@@ -496,7 +733,7 @@ UnpackDigitTiles:
 
 
 
-  org $0500
+  org $0600
 Palette:
   ; 4 color palette
   hex 9bbc0f 8bac0f 306230 0f380f
@@ -572,7 +809,7 @@ ButtonJumpTable:
   dw btnShl
   dw btnShr
 
-  org $0600
+  org $0700
 ; Packed tile data
 DigitTiles1bpp:
   incbin "digitTiles.1bpp"
