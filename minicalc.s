@@ -414,7 +414,8 @@ btnShl:
 btnShr:
   rts
 
-; Draw the last 5 entires of the stack, from the bottom up
+; Draw the last 5 entires of the stack, from the bottom up, erasing
+;  entries up to the top.
 DrawStack:
   tmp = r3
   ePtr = r4 ; pointer to stack entry we're drawing
@@ -425,17 +426,22 @@ DrawStack:
   lda #>StackAddr
   sta dest+1
 
-  ldx sPtr
-  cpx #0  ; check for empty stack case
-  beq @eraseRows
-  dex     ; step back to the last actual entry
-  dex
+  ldx sPtr        ; copy stack ptr to working ptr
   stx ePtr
 
 @rowLoop
-  ; Unpack entry into scratch as up to 4 bytes (depending on leading zeroes)
   lda #0
-  sta len         ; init length counter
+  sta len         ; init length counter for this row
+
+  ldx ePtr
+  cpx #0
+  beq @drawRow    ; draw empty row (length == 0)
+
+  dex             ; step down the stack one entry
+  dex
+  stx ePtr
+
+  ; Unpack entry into scratch as up to 4 bytes (depending on leading zeroes)
   lda stack+1, x  ; get high byte
   tay             ; cache for low nibble below
   lsr             ; >> 4
@@ -482,6 +488,7 @@ DrawStack:
   inc len
 @lz3
 
+@drawRow
   jsr DrawFourDigits
 
   ; Adjust destination for next row
@@ -493,27 +500,9 @@ DrawStack:
   sbc #>($40 * 6 + 4 * 4)
   sta dest+1
 
-  ldx ePtr
-  cpx #0
-  beq @eraseRows  ; start erasing rows if we reached the top of the stack
-
   lda dest+1
   cmp #>(StackAddr - ($40 * 6 + 4 * 4) * 5) ; why doesn't 6 work here?
-  beq @done       ; stop drawing entirely if we've reached the final drawn row
-
-  dex ; adjust our stack pointer
-  dex
-  stx ePtr
-  jmp @rowLoop
-
-@eraseRows
-  ; Erase the remaining rows
-
-  ; Check if we just drew the final row
-  lda dest+1
-  cmp #>(StackAddr - ($40 * 6 + 4 * 4) * 5)
-  beq @done
-
+  bne @rowLoop    ; keep drawing until we've reached the top row
 
 @done
   rts
