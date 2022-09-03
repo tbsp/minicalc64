@@ -286,10 +286,42 @@ ReadInputs:
 btnPush:
   lda entryCursor
   cmp #0
-  beq @noEntry
+  bne @continue
+  rts
+@continue
   
   len = r0
-  
+
+  ; If a user types less than 4 digits, we need to zero pad the leading
+  ;  nibbles when storing it as 16bit. entryCursor tells us how many digits
+  ;  they entered (if they manually entered leading zeroes we don't care).
+
+  ; I can't think of a clever approach, so I'll just move the entered digits
+  ;  to the right, insert zeroes, and then treat it as if they entered all 4.
+
+  sec
+  sbc #4
+  beq @noShifting
+
+  eor #$ff ; invert to get number of shiftLoop passes to perform
+  clc
+  adc #1
+  tay
+
+@shiftPass
+  ldx #3
+    @shiftLoop
+      lda entryDigits-1, x
+      sta entryDigits, x
+      dex
+    bne @shiftLoop
+    lda #0
+    sta entryDigits, x
+    dey
+  bne @shiftPass
+
+@noShifting
+  ; From here we can act as if they entered 4 digits
   ldx sPtr
 
   lda entryDigits+2
