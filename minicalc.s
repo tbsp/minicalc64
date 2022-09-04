@@ -247,7 +247,8 @@ ReadInputs:
 
 @padA
   lda cursorY
-  cmp #4
+  sec
+  sbc #4
   bcs @specialButton
   ; Digit button
   lda entryCursor
@@ -263,7 +264,17 @@ ReadInputs:
   jmp DrawEntry
 
 @specialButton
-  rts
+  asl ; Y*4
+  asl
+  adc cursorX
+  asl           ; A now contains the jump offset for the handler
+
+  tax
+  lda ButtonJumpTable, x
+  sta source
+  lda ButtonJumpTable+1, x
+  sta source+1
+  jmp (source)
 
 @padB
   ; backspace OR pop (if no digits entered)
@@ -366,28 +377,94 @@ btnPush:
 btnPop:
   ldx sPtr
   cpx #0
-  beq + ; stack empty, pop nothing
+  beq + ; stack empty, do nothing
+
   dex
   dex
   stx sPtr
+
   jsr DrawStack ; we've actually altered the stack, so draw it!
 +
   rts
 
 ; Swap the last two items on the stack (if there are two)
 btnSwap:
+  ldx sPtr
+  cpx #4
+  bcc + ; stack doesn't have two items, do nothing
+  lda stack-1, x
+  sta r0
+  lda stack-2, x
+
+  ldy stack-3, x
+  sty stack-1, x
+  ldy stack-4, x
+  sty stack-2, x
+
+  sta stack-4, x
+  lda r0
+  sta stack-3, x
+  jsr DrawStack ; we've actually altered the stack, so draw it!
++
   rts
 
 ; Duplicate the last item on the stack (if there is one)
 btnDupe:
+  ldx sPtr
+  cpx #2
+  bcc + ; stack doesn't have an item, do nothing
+  lda stack-2, x
+  sta stack, x
+  lda stack-1, x
+  sta stack+1, x
+
+  inx
+  inx
+  stx sPtr
+  jsr DrawStack ; we've actually altered the stack, so draw it!
++
   rts
 
 ; Add the last two items on the stack and push the result
 btnAdd:
+  ldx sPtr
+  cpx #4
+  bcc + ; stack doesn't have two items, do nothing
+  clc
+  lda stack-1, x
+  adc stack-3, x
+  sta stack-3, x
+  lda stack-2, x
+  adc stack-4, x
+  sta stack-4, x
+
+  dex
+  dex
+  stx sPtr
+
+  jsr DrawStack ; we've actually altered the stack, so draw it!
++
   rts
 
 ; Subtract the last item on the stack from the second last and push the result
 btnSub:
+  ldx sPtr
+  cpx #4
+  bcc + ; stack doesn't have two items, do nothing
+  sec
+  lda stack-3, x
+  sbc stack-1, x
+  sta stack-3, x
+  lda stack-4, x
+  sbc stack-2, x
+  sta stack-4, x
+
+  dex
+  dex
+  stx sPtr
+
+  jsr DrawStack ; we've actually altered the stack, so draw it!
++
   rts
 
 ; Multiply the last two items on the stack and push the result
@@ -400,18 +477,68 @@ btnDiv:
 
 ; Bitwise AND the last two items on the stack and push the result
 btnAnd:
+  ldx sPtr
+  cpx #4
+  bcc + ; stack doesn't have two items, do nothing
+  lda stack-3, x
+  and stack-1, x
+  sta stack-3, x
+  lda stack-4, x
+  and stack-2, x
+  sta stack-4, x
+
+  dex
+  dex
+  stx sPtr
+
+  jsr DrawStack ; we've actually altered the stack, so draw it!
++
   rts
 
 ; Bitwise OR the last two items on the stack and push the result
 btnEor:
+  ldx sPtr
+  cpx #4
+  bcc + ; stack doesn't have two items, do nothing
+  lda stack-3, x
+  eor stack-1, x
+  sta stack-3, x
+  lda stack-4, x
+  eor stack-2, x
+  sta stack-4, x
+
+  dex
+  dex
+  stx sPtr
+
+  jsr DrawStack ; we've actually altered the stack, so draw it!
++
   rts
 
 ; Shift the last item on the stack left (logically)
 btnShl:
+  ldx sPtr
+  cpx #0
+  beq + ; stack empty, do nothing
+
+  asl stack-2, x
+  rol stack-1, x
+
+  jsr DrawStack ; we've actually altered the stack, so draw it!
++
   rts
 
 ; Shift the last item on the stack right (logically)
 btnShr:
+  ldx sPtr
+  cpx #0
+  beq + ; stack empty, do nothing
+
+  lsr stack-1, x
+  ror stack-2, x
+
+  jsr DrawStack ; we've actually altered the stack, so draw it!
++
   rts
 
 ; Draw the last 5 entires of the stack, from the bottom up, erasing
@@ -754,7 +881,7 @@ UnpackDigitTiles:
 
 
 
-  org $0600
+  org $0700
 Palette:
   ; 4 color palette
   hex 9bbc0f 8bac0f 306230 0f380f
@@ -830,7 +957,7 @@ ButtonJumpTable:
   dw btnShl
   dw btnShr
 
-  org $0700
+  org $0800
 ; Packed tile data
 DigitTiles1bpp:
   incbin "digitTiles.1bpp"
