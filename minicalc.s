@@ -431,12 +431,12 @@ btnAdd:
   cpx #4
   bcc + ; stack doesn't have two items, do nothing
   clc
-  lda stack-1, x
-  adc stack-3, x
-  sta stack-3, x
   lda stack-2, x
   adc stack-4, x
   sta stack-4, x
+  lda stack-1, x
+  adc stack-3, x
+  sta stack-3, x
 
   dex
   dex
@@ -451,13 +451,15 @@ btnSub:
   ldx sPtr
   cpx #4
   bcc + ; stack doesn't have two items, do nothing
+
+  ; TODO: Fix this so (say) 0x10 - 0x20 = 0xfff0 (not 0xf0) - sign extension?
   sec
-  lda stack-3, x
-  sbc stack-1, x
-  sta stack-3, x
   lda stack-4, x
   sbc stack-2, x
   sta stack-4, x
+  lda stack-3, x
+  sbc stack-1, x
+  sta stack-3, x
 
   dex
   dex
