@@ -221,28 +221,32 @@ ReadInputs:
 @done
   rts
 @padDown
-  lda cursorY
-  ora #0
-  beq @done
   dec cursorY
+  lda cursorY
+  cmp #$ff
+  bne @downDone
+  lda #6
+  sta cursorY
+@downDone
   rts
 @padUp
-  lda cursorY
-  cmp #6
-  beq @done
   inc cursorY
+  lda cursorY
+  cmp #7
+  bne @doneUp
+  lda #0
+  sta cursorY
+@doneUp
   rts
 @padLeft
-  lda cursorX
-  ora #0
-  beq @done
   dec cursorX
-  rts
+  jmp @leftRight
 @padRight
-  lda cursorX
-  cmp #3
-  beq @done
   inc cursorX
+@leftRight
+  lda cursorX
+  and #%00000011
+  sta cursorX
   rts
 
 @padA
