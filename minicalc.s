@@ -553,7 +553,7 @@ btnDiv:
   dex
   dex
   stx sPtr
-  
+
   jsr DrawStack ; we've actually altered the stack, so draw it!
 +
   rts
@@ -563,9 +563,11 @@ btnAnd:
   ldx sPtr
   cpx #4
   bcc + ; stack doesn't have two items, do nothing
+
   lda stack-3, x
   and stack-1, x
   sta stack-3, x
+
   lda stack-4, x
   and stack-2, x
   sta stack-4, x
@@ -583,11 +585,13 @@ btnEor:
   ldx sPtr
   cpx #4
   bcc + ; stack doesn't have two items, do nothing
+
   lda stack-3, x
-  eor stack-1, x
+  ora stack-1, x
   sta stack-3, x
+
   lda stack-4, x
-  eor stack-2, x
+  ora stack-2, x
   sta stack-4, x
 
   dex
