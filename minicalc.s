@@ -455,11 +455,30 @@ btnPush:
 @noEntry
   rts
 
+; Cleanup after all stack-affecting operations
+FinalizeOperation:
+
+  ; Decrement the stack pointer as long as the last value is zero
+  lda stack-1, x  ; compare low/high bytes to see if the result is zero
+  ora stack-2, x
+  bne ++
+  dex             ; result is zero, remove from stack
+  dex
+  stx sPtr
+++
+
+  jsr DrawStack
+
+  rts
+
 ; Add the last two items on the stack and push the result
 btnAdd:
   ldx sPtr
   cpx #4
-  bcc + ; stack doesn't have two items, do nothing
+  bcs +
+  rts ; stack doesn't have two items, do nothing
++
+
   clc
   lda stack-2, x
   adc stack-4, x
@@ -472,15 +491,15 @@ btnAdd:
   dex
   stx sPtr
 
-  jsr DrawStack ; we've actually altered the stack, so draw it!
-+
-  rts
+  jmp FinalizeOperation
 
 ; Subtract the last item on the stack from the second last and push the result
 btnSub:
   ldx sPtr
   cpx #4
-  bcc + ; stack doesn't have two items, do nothing
+  bcs +
+  rts ; stack doesn't have two items, do nothing
++
 
   ; TODO: Fix this so (say) 0x10 - 0x20 = 0xfff0 (not 0xf0) - sign extension?
   sec
@@ -495,15 +514,15 @@ btnSub:
   dex
   stx sPtr
 
-  jsr DrawStack ; we've actually altered the stack, so draw it!
-+
-  rts
+  jmp FinalizeOperation
 
 ; Multiply the last two items on the stack and push the result
 btnMul:
   ldx sPtr
   cpx #4
-  bcc + ; stack doesn't have two items, do nothing
+  bcs +
+  rts ; stack doesn't have two items, do nothing
++
 
   lda stack-4, x  ; copy 2nd last stack value into scratch space
   sta r0
@@ -541,15 +560,15 @@ btnMul:
   dex
   stx sPtr
 
-  jsr DrawStack ; we've actually altered the stack, so draw it!
-+
-  rts
+  jmp FinalizeOperation
 
 ; Divide the last item on the stack by the second last and push the result
 btnDiv:
   ldx sPtr
   cpx #4
-  bcc + ; stack doesn't have two items, do nothing
+  bcs +
+  rts ; stack doesn't have two items, do nothing
++
 
   lda #0
   sta r0  ; initilize remainder
@@ -580,15 +599,15 @@ btnDiv:
   dex
   stx sPtr
 
-  jsr DrawStack ; we've actually altered the stack, so draw it!
-+
-  rts
+  jmp FinalizeOperation
 
 ; Bitwise AND the last two items on the stack and push the result
 btnAnd:
   ldx sPtr
   cpx #4
-  bcc + ; stack doesn't have two items, do nothing
+  bcs +
+  rts ; stack doesn't have two items, do nothing
++
 
   lda stack-3, x
   and stack-1, x
@@ -602,15 +621,15 @@ btnAnd:
   dex
   stx sPtr
 
-  jsr DrawStack ; we've actually altered the stack, so draw it!
-+
-  rts
+  jmp FinalizeOperation
 
 ; Bitwise OR the last two items on the stack and push the result
 btnEor:
   ldx sPtr
   cpx #4
-  bcc + ; stack doesn't have two items, do nothing
+  bcs +
+  rts ; stack doesn't have two items, do nothing
++
 
   lda stack-3, x
   ora stack-1, x
@@ -624,36 +643,28 @@ btnEor:
   dex
   stx sPtr
 
-  jsr DrawStack ; we've actually altered the stack, so draw it!
-+
-  rts
+  jmp FinalizeOperation
 
 ; Shift the last item on the stack left (logically)
 btnShl:
   ldx sPtr
   cpx #0
-  beq + ; stack empty, do nothing
+  bne +
+  rts ; stack empty, do nothing
++
 
   asl stack-2, x
   rol stack-1, x
 
-  lda stack-1, x  ; compare low/high bytes to see if the result is zero
-  ora stack-2, x
-  bne ++
-  dex             ; result is zero, remove from stack
-  dex
-  stx sPtr
-++
-
-  jsr DrawStack ; we've actually altered the stack, so draw it!
-+
-  rts
+  jmp FinalizeOperation
 
 ; Shift the last item on the stack right (logically)
 btnShr:
   ldx sPtr
   cpx #0
-  beq + ; stack empty, do nothing
+  bne +
+  rts ; stack empty, do nothing
++
 
   lsr stack-1, x
   ror stack-2, x
@@ -666,9 +677,7 @@ btnShr:
   stx sPtr
 ++
 
-  jsr DrawStack ; we've actually altered the stack, so draw it!
-+
-  rts
+  jmp FinalizeOperation
 
 ; Draw the last 5 entires of the stack, from the bottom up, erasing
 ;  entries up to the top.
