@@ -611,6 +611,14 @@ btnShl:
   asl stack-2, x
   rol stack-1, x
 
+  lda stack-1, x  ; compare low/high bytes to see if the result is zero
+  ora stack-2, x
+  bne ++
+  dex             ; result is zero, remove from stack
+  dex
+  stx sPtr
+++
+
   jsr DrawStack ; we've actually altered the stack, so draw it!
 +
   rts
@@ -623,6 +631,14 @@ btnShr:
 
   lsr stack-1, x
   ror stack-2, x
+
+  lda stack-1, x  ; compare low/high bytes to see if the result is zero
+  ora stack-2, x
+  bne ++
+  dex             ; result is zero, remove from stack
+  dex
+  stx sPtr
+++
 
   jsr DrawStack ; we've actually altered the stack, so draw it!
 +
