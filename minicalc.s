@@ -521,6 +521,41 @@ btnMul:
 
 ; Divide the last item on the stack by the second last and push the result
 btnDiv:
+  ldx sPtr
+  cpx #4
+  bcc + ; stack doesn't have two items, do nothing
+
+  lda #0
+  sta r0  ; initilize remainder
+  sta r1
+
+  ldy #$10
+@loop:
+  asl stack-4, x
+  rol stack-3, x
+  rol r0
+  rol r1
+  lda r0
+  sec
+  sbc stack-2, x
+  sta r3
+  lda r1
+  sbc stack-1, x
+  bcc @skip
+  sta r1
+  lda r3
+  sta r0
+  inc stack-4, x
+@skip:
+  dey
+  bne @loop
+
+  dex
+  dex
+  stx sPtr
+  
+  jsr DrawStack ; we've actually altered the stack, so draw it!
++
   rts
 
 ; Bitwise AND the last two items on the stack and push the result
