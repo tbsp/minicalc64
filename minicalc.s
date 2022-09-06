@@ -211,6 +211,10 @@ ReadInputs:
   and #PAD_RIGHT
   bne @padRight
 
+  lda heldInputs
+  and #PAD_C
+  bne @padCHeld
+
   lda newInputs
   and #PAD_A
   bne @padA
@@ -218,8 +222,9 @@ ReadInputs:
   and #PAD_B
   bne @padB
   lda newInputs
-  and #PAD_C
-  bne @padC
+  and #PAD_START
+  bne @padStart
+
 @done
   rts
 @padDown
@@ -294,9 +299,74 @@ ReadInputs:
   sta entryDigits, x
   jmp DrawEntry
 
-@padC
+@padCHeld
+  ; C+A = dupe
+  lda newInputs
+  and #PAD_A
+  bne btnDupe
+
+  ; C+B = swap
+  lda newInputs
+  and #PAD_B
+  bne btnSwap
+
+  rts
+
+@padStart
   jmp btnPush
 
+
+; Pop the last entry off the stack (if there is one)
+btnPop:
+  ldx sPtr
+  cpx #0
+  beq + ; stack empty, do nothing
+
+  dex
+  dex
+  stx sPtr
+
+  jsr DrawStack ; we've actually altered the stack, so draw it!
++
+  rts
+
+; Swap the last two items on the stack (if there are two)
+btnSwap:
+  ldx sPtr
+  cpx #4
+  bcc + ; stack doesn't have two items, do nothing
+  lda stack-1, x
+  sta r0
+  lda stack-2, x
+
+  ldy stack-3, x
+  sty stack-1, x
+  ldy stack-4, x
+  sty stack-2, x
+
+  sta stack-4, x
+  lda r0
+  sta stack-3, x
+  jsr DrawStack ; we've actually altered the stack, so draw it!
++
+  rts
+
+; Duplicate the last item on the stack (if there is one)
+btnDupe:
+  ldx sPtr
+  cpx #2
+  bcc + ; stack doesn't have an item, do nothing
+  lda stack-2, x
+  sta stack, x
+  lda stack-1, x
+  sta stack+1, x
+
+  inx
+  inx
+  stx sPtr
+  jsr DrawStack ; we've actually altered the stack, so draw it!
++
+  rts
 
 ; Push the current entry to the stack, as long as
 ;  there is an entry and the stack isn't full
@@ -383,58 +453,6 @@ btnPush:
   sta entryCursor
   jmp DrawEntry
 @noEntry
-  rts
-
-; Pop the last entry off the stack (if there is one)
-btnPop:
-  ldx sPtr
-  cpx #0
-  beq + ; stack empty, do nothing
-
-  dex
-  dex
-  stx sPtr
-
-  jsr DrawStack ; we've actually altered the stack, so draw it!
-+
-  rts
-
-; Swap the last two items on the stack (if there are two)
-btnSwap:
-  ldx sPtr
-  cpx #4
-  bcc + ; stack doesn't have two items, do nothing
-  lda stack-1, x
-  sta r0
-  lda stack-2, x
-
-  ldy stack-3, x
-  sty stack-1, x
-  ldy stack-4, x
-  sty stack-2, x
-
-  sta stack-4, x
-  lda r0
-  sta stack-3, x
-  jsr DrawStack ; we've actually altered the stack, so draw it!
-+
-  rts
-
-; Duplicate the last item on the stack (if there is one)
-btnDupe:
-  ldx sPtr
-  cpx #2
-  bcc + ; stack doesn't have an item, do nothing
-  lda stack-2, x
-  sta stack, x
-  lda stack-1, x
-  sta stack+1, x
-
-  inx
-  inx
-  stx sPtr
-  jsr DrawStack ; we've actually altered the stack, so draw it!
-+
   rts
 
 ; Add the last two items on the stack and push the result
