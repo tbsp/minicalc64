@@ -4,6 +4,8 @@ Screen    EQU $f000
 EntryAddr EQU (Screen + 46 * 64 + 4) ; Address to start drawing entry digits
 StackAddr EQU (Screen + 36 * 64 + 4) ; Address to start drawing stack digits
 
+MaxEntryStack EQU $20
+
 ENUM $0
   r0          dsb 1 ; general purpose ZP variables
   r1          dsb 1
@@ -32,8 +34,8 @@ ENUM $0
   entryDigits dsb 4 ; one byte per digit being entered
 
   sPtr        dsb 1 ; stack pointer
-  stack       dsb 32 ; 2 bytes per entry (always 16bit entries)
-                    ;  (only the lower 5 entries are visible)
+  stack       dsb MaxEntryStack ; 2 bytes per entry (always 16bit entries)
+                                ;  (only the most recent 5 entries are visible)
 
   scratch     dsb 4 ; 'large' scratch buffer (used for staging digits to print)
 
@@ -297,9 +299,15 @@ ReadInputs:
 
 
 ; Push the current entry to the stack, as long as
-;  there is an entry and the stack isn't full (TODO: check full)
+;  there is an entry and the stack isn't full
 btnPush:
-  lda entryCursor
+  lda sPtr        ; verify that the stack isn't full
+  cmp #MaxEntryStack
+  bne @checkEntry
+  rts
+
+@checkEntry
+  lda entryCursor ; verify the user has entered something
   cmp #0
   bne @continue
   rts
