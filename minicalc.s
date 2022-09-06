@@ -310,11 +310,20 @@ ReadInputs:
   and #PAD_B
   bne btnSwap
 
+  ; C+Start = clear stack
+  lda newInputs
+  and #PAD_START
+  bne @padCStart
+
   rts
 
 @padStart
   jmp btnPush
 
+@padCStart
+  lda #0
+  sta sPtr
+  jmp DrawStack
 
 ; Pop the last entry off the stack (if there is one)
 btnPop:
@@ -1017,19 +1026,6 @@ UnpackDigitTiles:
 
   rts
 
-
-
-  org $0700
-Palette:
-  ; 4 color palette
-  hex 9bbc0f 8bac0f 306230 0f380f
-
-  ; ; ZX Spectrum Palette
-  ; hex 000000 0000c0 c00000 c000c0
-  ; hex 00c000 00c0c0 c0c000 c0c0c0
-  ; hex 000000 0000ff ff0000 ff00ff
-  ; hex 00ff00 00ffff ffff00 ffffff
-
 ; Details on where to draw the cursor for a given cursorX/cursorY combination
 ; 4 bytes per button (Screen addr, width, height)
 ; Note: We might as well just bake in the X component, even though it seems
@@ -1095,18 +1091,28 @@ ButtonJumpTable:
   dw btnShl
   dw btnShr
 
-  org $0800
 ; Packed tile data
 DigitTiles1bpp:
   incbin "digitTiles.1bpp"
 
-  org $1000
 BackgroundTiles2bpp:
   incbin "backgroundTiles.2bpp"
 
+
+  org $0C00 ; this must be page aligned for the palette copy to work
+Palette:
+  ; 4 color palette
+  hex 9bbc0f 8bac0f 306230 0f380f
+
+  ; ; ZX Spectrum Palette
+  ; hex 000000 0000c0 c00000 c000c0
+  ; hex 00c000 00c0c0 c0c000 c0c0c0
+  ; hex 000000 0000ff ff0000 ff00ff
+  ; hex 00ff00 00ffff ffff00 ffffff
+
 ; Location to unpack digit tiles to
 ; (Background tiles will be unpacked directly to the screen)
-  org $1400
+  org $0D00
   ;org Screen ; debug, unpack to screen itself!
 
 ; Include a padding byte so we can do DigitEmpty-1 and stay on the page
@@ -1121,7 +1127,7 @@ DigitEmpty:
 DigitTiles:
   dsb 4*80
 
-  org $1600 ; new page to simplify DrawDigit
+  org $0F00 ; new page to simplify DrawDigit
 ; Dim tiles used for stack (color 2)
 DigitTilesDim:
   dsb 4*80
