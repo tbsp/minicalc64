@@ -458,12 +458,12 @@ btnSub:
 
   ; TODO: Fix this so (say) 0x10 - 0x20 = 0xfff0 (not 0xf0) - sign extension?
   sec
-  lda stack-4, x
-  sbc stack-2, x
-  sta stack-4, x
-  lda stack-3, x
-  sbc stack-1, x
-  sta stack-3, x
+  lda stack-4, x  ; get low byte of 2nd last value
+  sbc stack-2, x  ; subtract low byte of last value
+  sta stack-4, x  ; store result
+  lda stack-3, x  ; get high byte of 2nd last value
+  sbc stack-1, x  ; subtract high byte of last value
+  sta stack-3, x  ; store result
 
   dex
   dex
@@ -475,6 +475,48 @@ btnSub:
 
 ; Multiply the last two items on the stack and push the result
 btnMul:
+  ldx sPtr
+  cpx #4
+  bcc + ; stack doesn't have two items, do nothing
+
+  lda stack-4, x  ; copy 2nd last stack value into scratch space
+  sta r0
+  lda stack-3, x
+  sta r1
+
+  lda #0          ; zero the destination entry
+  sta stack-4, x
+  sta stack-3, x
+
+  ldy #$10         ; loop 16 times
+- asl stack-4, x  ; shift the full 32bit value over once
+  rol stack-3, x
+  rol stack-2, x
+  rol stack-1, x
+  bcc ++
+
+  clc
+  lda r0
+  adc stack-4, x
+  sta stack-4, x
+  lda r1
+  adc stack-3, x
+  sta stack-3, x
+
+  lda #0
+  adc stack-2, x
+  sta stack-2, x
+
+++
+  dey
+  bne -         ; loop until we're done
+
+  dex
+  dex
+  stx sPtr
+
+  jsr DrawStack ; we've actually altered the stack, so draw it!
++
   rts
 
 ; Divide the last item on the stack by the second last and push the result
