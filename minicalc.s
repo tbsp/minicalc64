@@ -16,6 +16,11 @@ ENUM $0
   r6          dsb 1
   r7          dsb 1
 
+  a0          dsw 1 ; general purpose addresses
+  a1          dsw 1
+  a2          dsw 1
+  a3          dsw 1
+
   ready       dsb 1 ; indicates NMI has fired
 
   ; General pointers
@@ -53,18 +58,6 @@ Boot:
 
   lda #>Palette
   sta COLORS
-
-  ; minicube64's memory is initialized to zero
-  ; lda #0
-  ; sta heldInputs
-
-  ; sta cursorX
-  ; sta cursorY
-
-  ; sta entryCursor
-
-  lda #0
-  sta sPtr
 
   ; Unpack 1bpp digit tiles as color 3
   lda #<DigitTiles
@@ -106,7 +99,7 @@ Main:
   lda ready     ; Wait until vblank has fired
   beq Main
 
-  lda #0        ; DrawCursor with color 0 to clear it
+  lda #1        ; DrawCursor with color 0 to clear it
   sta r0
   jsr DrawCursor
 
@@ -198,6 +191,20 @@ ReadInputs:
   sta heldInputs
 
   ; Now check for inputs we're interested in
+
+  ; Note: held checks go first to give them priority
+  lda heldInputs
+  and #PAD_C
+  beq @noCheld
+  jmp @padCHeld
+@noCheld
+
+  lda heldInputs
+  and #PAD_START
+  beq @noStartHeld
+  jsr @padStartHeld
+@noStartHeld
+
   lda newInputs
   and #PAD_DOWN
   bne @padDown
@@ -211,10 +218,6 @@ ReadInputs:
   and #PAD_RIGHT
   bne @padRight
 
-  lda heldInputs
-  and #PAD_C
-  bne @padCHeld
-
   lda newInputs
   and #PAD_A
   bne @padA
@@ -223,7 +226,9 @@ ReadInputs:
   bne @padB
   lda newInputs
   and #PAD_START
-  bne @padStart
+  beq @noStart
+  jmp @padStart
+@noStart
 
 @done
   rts
@@ -291,7 +296,9 @@ ReadInputs:
   ; backspace OR pop (if no digits entered)
   lda entryCursor
   cmp #0
-  beq btnPop
+  bne @notEmpty
+  jmp btnPop
+@notEmpty
 
   dec entryCursor
   ldx entryCursor ; we have to zero the digit or partial pushes in the future will be wrong
@@ -303,19 +310,94 @@ ReadInputs:
   ; C+A = dupe
   lda newInputs
   and #PAD_A
-  bne btnDupe
+  beq @noCA
+  jmp btnDupe
+@noCA
 
   ; C+B = swap
   lda newInputs
   and #PAD_B
-  bne btnSwap
+  beq @noCB
+  jmp btnSwap
+@noCB
 
   ; C+Start = clear stack
   lda newInputs
   and #PAD_START
-  bne @padCStart
+  beq @noCS
+  jmp @padCStart
+@noCS
+
+  ; C+up = add
+  lda newInputs
+  and #PAD_UP
+  beq @noCU
+  jmp btnAdd
+@noCU
+
+  ; C+down = sub
+  lda newInputs
+  and #PAD_DOWN
+  beq @noCD
+  jmp btnSub
+@noCD
+
+  ; C+left = mul
+  lda newInputs
+  and #PAD_LEFT
+  beq @noCL
+  jmp btnMul
+@noCL
+
+  ; C+right = div
+  lda newInputs
+  and #PAD_RIGHT
+  beq @noCR
+  jmp btnDiv
+@noCR
 
   rts
+
+@padStartHeld
+  ; Start+up = AND
+  lda newInputs
+  and #PAD_UP
+  beq @noSA
+  pla ; remove ReadInputs return address from stack
+  pla
+  jmp btnAnd
+@noSA
+
+  ; Start+down = OR
+  lda newInputs
+  and #PAD_DOWN
+  beq @noSD
+  pla ; remove ReadInputs return address from stack
+  pla
+  jmp btnOra
+@noSD
+
+  ; Start+left = Shift left
+  lda newInputs
+  and #PAD_LEFT
+  beq @noSL
+  pla ; remove ReadInputs return address from stack
+  pla
+  jmp btnShl
+@noSL
+
+  ; Start+right = Shift right
+  lda newInputs
+  and #PAD_RIGHT
+  beq @noSR
+  pla ; remove ReadInputs return address from stack
+  pla
+  jmp btnShr
+@noSR
+
+  ; return to handle other inputs
+  rts
+
 
 @padStart
   jmp btnPush
@@ -633,7 +715,7 @@ btnAnd:
   jmp FinalizeOperation
 
 ; Bitwise OR the last two items on the stack and push the result
-btnEor:
+btnOra:
   ldx sPtr
   cpx #4
   bcs +
@@ -678,14 +760,6 @@ btnShr:
   lsr stack-1, x
   ror stack-2, x
 
-  lda stack-1, x  ; compare low/high bytes to see if the result is zero
-  ora stack-2, x
-  bne ++
-  dex             ; result is zero, remove from stack
-  dex
-  stx sPtr
-++
-
   jmp FinalizeOperation
 
 ; Draw the last 5 entires of the stack, from the bottom up, erasing
@@ -694,6 +768,12 @@ DrawStack:
   tmp = r3
   ePtr = r4 ; pointer to stack entry we're drawing
   len = r5 ; length of digits to draw (shared with DrawFourDigits)
+
+  ; Setup the tiles to draw with
+  lda #<(DigitTilesDim-1)
+  sta a0
+  lda #>(DigitTilesDim-1)
+  sta a0+1
 
   lda #<StackAddr
   sta dest
@@ -793,6 +873,12 @@ DrawEntry:
   lda entryDigits+3
   sta scratch+3
 
+  ; Setup the tiles to draw with
+  lda #<(DigitTiles-1)
+  sta a0
+  lda #>(DigitTiles-1)
+  sta a0+1
+
   lda entryCursor
   sta r5
 
@@ -858,10 +944,10 @@ EraseDigit:
 
 ; Draw a digit of value r0 at the current dest
 DrawDigit:
-  ; Offset base address -1 because dey loops skip the 0th pixel
-  lda #<(DigitTiles-1)
+  ; Setup source pointer based on normal/dim tiles to draw with
+  lda a0
   sta source
-  lda #>(DigitTiles-1)
+  lda a0+1
   sta source+1
 
   digit = r0
@@ -1038,40 +1124,40 @@ ENDM
 
 CursorDetails:
 @zeroToThree
-  button 30, 53, 9, 11
-  button 38, 53, 9, 11
-  button 46, 53, 9, 11
-  button 54, 53, 9, 11
+  button 31, 54, 7, 9
+  button 39, 54, 7, 9
+  button 47, 54, 7, 9
+  button 55, 54, 7, 9
 @fourToSeven
-  button 30, 43, 9, 11
-  button 38, 43, 9, 11
-  button 46, 43, 9, 11
-  button 54, 43, 9, 11
+  button 31, 44, 7, 9
+  button 39, 44, 7, 9
+  button 47, 44, 7, 9
+  button 55, 44, 7, 9
 @eightToB
-  button 30, 33, 9, 11
-  button 38, 33, 9, 11
-  button 46, 33, 9, 11
-  button 54, 33, 9, 11
+  button 31, 34, 7, 9
+  button 39, 34, 7, 9
+  button 47, 34, 7, 9
+  button 55, 34, 7, 9
 @CToF
-  button 30, 23, 9, 11
-  button 38, 23, 9, 11
-  button 46, 23, 9, 11
-  button 54, 23, 9, 11
+  button 31, 24, 7, 9
+  button 39, 24, 7, 9
+  button 47, 24, 7, 9
+  button 55, 24, 7, 9
 @Ops
-  button 30, 16, 9, 8
-  button 38, 16, 9, 8
-  button 46, 16, 9, 8
-  button 54, 16, 9, 8
+  button 31, 17, 7, 6
+  button 39, 17, 7, 6
+  button 47, 17, 7, 6
+  button 55, 17, 7, 6
 @math
-  button 30, 8, 9, 9
-  button 38, 8, 9, 9
-  button 46, 8, 9, 9
-  button 54, 8, 9, 9
+  button 31, 9, 7, 7
+  button 39, 9, 7, 7
+  button 47, 9, 7, 7
+  button 55, 9, 7, 7
 @bitwise
-  button 30, 0, 9, 9
-  button 38, 0, 9, 9
-  button 46, 0, 9, 9
-  button 54, 0, 9, 9
+  button 31, 1, 7, 7
+  button 39, 1, 7, 7
+  button 47, 1, 7, 7
+  button 55, 1, 7, 7
 
 ; Table with routines to call for each button pressed,
 ;  aside from the digit buttons which are handled otherwise
@@ -1087,37 +1173,33 @@ ButtonJumpTable:
   dw btnDiv
 
   dw btnAnd
-  dw btnEor
+  dw btnOra
   dw btnShl
   dw btnShr
 
 ; Packed tile data
 DigitTiles1bpp:
+  ; packed with: png2cube.py -d 1 -o digitTiles.1bpp digits.png
   incbin "digitTiles.1bpp"
 
 BackgroundTiles2bpp:
+  ; packed with: png2cube.py -d 2 -o backgroundTiles.2bpp background.png
   incbin "backgroundTiles.2bpp"
 
 
-  org $0C00 ; this must be page aligned for the palette copy to work
+  org $0D00 ; this must be page aligned for the palette copy to work
 Palette:
   ; 4 color palette
-  hex 9bbc0f 8bac0f 306230 0f380f
-
-  ; ; ZX Spectrum Palette
-  ; hex 000000 0000c0 c00000 c000c0
-  ; hex 00c000 00c0c0 c0c000 c0c0c0
-  ; hex 000000 0000ff ff0000 ff00ff
-  ; hex 00ff00 00ffff ffff00 ffffff
+  ;hex 9bbc0f 8bac0f 306230 0f380f ; DMGish
+  ;hex ffffff aa55cc 66ccaa 000000 ; nasu
+  ;hex 000000 aa55cc 66ccaa ffffff ; nasu
+  hex 000000 221133 338877 ffffff
 
 ; Location to unpack digit tiles to
 ; (Background tiles will be unpacked directly to the screen)
-  org $0D00
-  ;org Screen ; debug, unpack to screen itself!
+  org $0E00
 
-; Include a padding byte so we can do DigitEmpty-1 and stay on the page
-Padding:
-  dsb 1
+  dsb 1 ; Include a padding byte so we can use <addr>-1 and stay on the page
 
 ; Empty tile (used to erase old digits)
 DigitEmpty:
@@ -1127,7 +1209,9 @@ DigitEmpty:
 DigitTiles:
   dsb 4*80
 
-  org $0F00 ; new page to simplify DrawDigit
 ; Dim tiles used for stack (color 2)
+  org $1000 ; new page to simplify DrawDigit
+  dsb 1 ; padding byte
+
 DigitTilesDim:
   dsb 4*80
