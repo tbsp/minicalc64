@@ -12,6 +12,8 @@ To perform 1+2 (or in postfix: 1 2 +), you would type "1", push it to the stack 
 
 # Basic Controls
 
+![minicube](https://user-images.githubusercontent.com/10489588/188783434-0d5fae39-1a6a-4bd4-a6fc-27a829dbad34.gif)
+
 - Arrows/Dpad: Move cursor
 - A: Press highlighted button
 - B: Delete last digit entered, or pop last item on stack if no digits remain
