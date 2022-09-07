@@ -2,7 +2,7 @@
 
 This is a [hexidecimal](https://en.wikipedia.org/wiki/Hexadecimal) postfix calculator written as an entry to [MinicubeJam04](https://itch.io/jam/minicubejam04).
 
-To run the calculator you'll need the [Minicube64 emulator](https://aeriform.itch.io/minicube64). You can then run the calculator with `minicube64 minicalc.bin`, using the pre-built release, or `minicube64 minicalc.s` if you're running from source.
+To run the calculator you'll need the [Minicube64 emulator](https://aeriform.itch.io/minicube64). You can then run the calculator with `minicube64 minicalc64.bin`, using the pre-built release, or `minicube64 minicalc64.s` if you're running from source.
 
 This calculator was heavily influenced by [cccc](https://wiki.xxiivv.com/site/cccc.html), a calculator for the [varvara computer](https://wiki.xxiivv.com/site/varvara.html) written in [uxntal](https://wiki.xxiivv.com/site/uxntal.html).
 
