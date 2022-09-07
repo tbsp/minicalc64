@@ -10,9 +10,11 @@ In this calculator you type 16bit values, push them onto the stack, and then use
 
 To perform 1+2 (or in postfix: 1 2 +), you would type "1", push it to the stack (^ or START), type "2", push (^ or START), then add them together (+). This will result on a value of "3" on the stack.
 
+This calculator was heavily influenced by [cccc](https://wiki.xxiivv.com/site/cccc.html), a calculator for the [varvara computer](https://wiki.xxiivv.com/site/varvara.html) written in [uxntal](https://wiki.xxiivv.com/site/uxntal.html).
+
 # Basic Controls
 
-![minicube](https://user-images.githubusercontent.com/10489588/188783434-0d5fae39-1a6a-4bd4-a6fc-27a829dbad34.gif)
+![minicube](https://user-images.githubusercontent.com/10489588/188784299-e7062596-7eee-431d-a657-2b007ac59007.gif)
 
 - Arrows/Dpad: Move cursor
 - A: Press highlighted button
@@ -55,3 +57,4 @@ Starting from the bottom left, moving left-to-right and top-to-bottom, the butto
 - Start+Down: Logical OR
 - Start+Left: Shift left
 - Start+Right: Shift right
+
