@@ -19,10 +19,10 @@ To perform 1+2 (or in postfix: 1 2 +), you would type "1", push it to the stack 
 ![minicube](https://user-images.githubusercontent.com/10489588/188784299-e7062596-7eee-431d-a657-2b007ac59007.gif)
 
 - Arrows/Dpad: Move cursor
-- A: Press highlighted button
-- B: Delete last digit entered, or pop last item on stack if no digits remain
-- Start: Push entry to stack
-- C+Start: Clear the stack
+- A [Z]: Press highlighted button
+- B [X]: Delete last digit entered, or pop last item on stack if no digits remain
+- Start [Enter]: Push entry to stack
+- C+Start [Enter]: Clear the stack
 
 # Buttons
 
@@ -47,16 +47,16 @@ Starting from the bottom left, moving left-to-right and top-to-bottom, the butto
 
 # Shortcuts (instead of using the specific buttons)
 
-- C+A: Swap
-- C+B: Duplicate
+- C+A [Z]: Swap
+- C+B [X]: Duplicate
 
 - C+Up: Add
 - C+Down: Subtract
 - C+Left: Multiply
 - C+Right: Divide
 
-- Start+Up: Logical AND
-- Start+Down: Logical OR
-- Start+Left: Shift left
-- Start+Right: Shift right
+- Start [Enter]+Up: Logical AND
+- Start [Enter]+Down: Logical OR
+- Start [Enter]+Left: Shift left
+- Start [Enter]+Right: Shift right
 
